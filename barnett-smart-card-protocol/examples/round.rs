@@ -11,6 +11,8 @@ use rand::thread_rng;
 use std::collections::HashMap;
 use std::iter::Iterator;
 use thiserror::Error;
+use wasm_bindgen::prelude::*;
+
 
 // Choose elliptic curve setting
 type Curve = starknet_curve::Projective;
@@ -225,19 +227,20 @@ fn encode_cards<R: Rng>(rng: &mut R, num_of_cards: usize) -> HashMap<Card, Class
     map
 }
 
-fn main() -> anyhow::Result<()> {
+#[wasm_bindgen]
+pub fn main() -> anyhow::Result<(),JsValue> {
     let m = 2;
     let n = 26;
     let num_of_cards = m * n;
     let rng = &mut thread_rng();
 
-    let parameters = CardProtocol::setup(rng, m, n)?;
+    let parameters = CardProtocol::setup(rng, m, n).map_err(|e| JsValue::from_str(&e.to_string()))?;
     let card_mapping = encode_cards(rng, num_of_cards);
 
-    let mut andrija = Player::new(rng, &parameters, &to_bytes![b"Andrija"].unwrap())?;
-    let mut kobi = Player::new(rng, &parameters, &to_bytes![b"Kobi"].unwrap())?;
-    let mut nico = Player::new(rng, &parameters, &to_bytes![b"Nico"].unwrap())?;
-    let mut tom = Player::new(rng, &parameters, &to_bytes![b"Tom"].unwrap())?;
+    let mut andrija = Player::new(rng, &parameters, &to_bytes![b"Andrija"].unwrap()).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut kobi = Player::new(rng, &parameters, &to_bytes![b"Kobi"].unwrap()).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut nico = Player::new(rng, &parameters, &to_bytes![b"Nico"].unwrap()).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut tom = Player::new(rng, &parameters, &to_bytes![b"Tom"].unwrap()).map_err(|e| JsValue::from_str(&e.to_string()))?;
 
     let players = vec![andrija.clone(), kobi.clone(), nico.clone(), tom.clone()];
 
@@ -247,13 +250,13 @@ fn main() -> anyhow::Result<()> {
         .collect::<Vec<_>>();
 
     // Each player should run this computation. Alternatively, it can be ran by a smart contract
-    let joint_pk = CardProtocol::compute_aggregate_key(&parameters, &key_proof_info)?;
+    let joint_pk = CardProtocol::compute_aggregate_key(&parameters, &key_proof_info).map_err(|e| JsValue::from_str(&e.to_string()))?;
 
     // Each player should run this computation and verify that all players agree on the initial deck
     let deck_and_proofs: Vec<(MaskedCard, RemaskingProof)> = card_mapping
         .keys()
         .map(|card| CardProtocol::mask(rng, &parameters, &joint_pk, &card, &Scalar::one()))
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<_>, _>>().map_err(|e| JsValue::from_str(&e.to_string()))?;
 
     let deck = deck_and_proofs
         .iter()
@@ -272,7 +275,7 @@ fn main() -> anyhow::Result<()> {
         &deck,
         &masking_factors,
         &permutation,
-    )?;
+    ).map_err(|e| JsValue::from_str(&e.to_string()))?;
 
     // 1.b everyone checks!
     CardProtocol::verify_shuffle(
@@ -281,7 +284,7 @@ fn main() -> anyhow::Result<()> {
         &deck,
         &a_shuffled_deck,
         &a_shuffle_proof,
-    )?;
+    ).map_err(|e| JsValue::from_str(&e.to_string()))?;
 
     //2.a Kobi shuffles second
     let permutation = Permutation::new(rng, m * n);
@@ -294,7 +297,7 @@ fn main() -> anyhow::Result<()> {
         &a_shuffled_deck,
         &masking_factors,
         &permutation,
-    )?;
+    ).map_err(|e| JsValue::from_str(&e.to_string()))?;
 
     //2.b Everyone checks
     CardProtocol::verify_shuffle(
@@ -303,7 +306,7 @@ fn main() -> anyhow::Result<()> {
         &a_shuffled_deck,
         &k_shuffled_deck,
         &k_shuffle_proof,
-    )?;
+    ).map_err(|e| JsValue::from_str(&e.to_string()))?;
 
     //3.a Nico shuffles third
     let permutation = Permutation::new(rng, m * n);
@@ -316,7 +319,7 @@ fn main() -> anyhow::Result<()> {
         &k_shuffled_deck,
         &masking_factors,
         &permutation,
-    )?;
+    ).map_err(|e| JsValue::from_str(&e.to_string()))?;
 
     //3.b Everyone checks
     CardProtocol::verify_shuffle(
@@ -325,7 +328,7 @@ fn main() -> anyhow::Result<()> {
         &k_shuffled_deck,
         &n_shuffled_deck,
         &n_shuffle_proof,
-    )?;
+    ).map_err(|e| JsValue::from_str(&e.to_string()))?;
 
     //4.a Tom shuffles last
     let permutation = Permutation::new(rng, m * n);
@@ -338,7 +341,7 @@ fn main() -> anyhow::Result<()> {
         &n_shuffled_deck,
         &masking_factors,
         &permutation,
-    )?;
+    ).map_err(|e| JsValue::from_str(&e.to_string()))?;
 
     //4.b Everyone checks before accepting last deck for game
     CardProtocol::verify_shuffle(
@@ -347,7 +350,7 @@ fn main() -> anyhow::Result<()> {
         &n_shuffled_deck,
         &final_shuffled_deck,
         &final_shuffle_proof,
-    )?;
+    ).map_err(|e| JsValue::from_str(&e.to_string()))?;
 
     // CARDS ARE SHUFFLED. ROUND OF THE GAME CAN BEGIN
     let deck = final_shuffled_deck;
@@ -357,21 +360,21 @@ fn main() -> anyhow::Result<()> {
     nico.receive_card(deck[2]);
     tom.receive_card(deck[3]);
 
-    let andrija_rt_1 = andrija.compute_reveal_token(rng, &parameters, &deck[1])?;
-    let andrija_rt_2 = andrija.compute_reveal_token(rng, &parameters, &deck[2])?;
-    let andrija_rt_3 = andrija.compute_reveal_token(rng, &parameters, &deck[3])?;
+    let andrija_rt_1 = andrija.compute_reveal_token(rng, &parameters, &deck[1]).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let andrija_rt_2 = andrija.compute_reveal_token(rng, &parameters, &deck[2]).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let andrija_rt_3 = andrija.compute_reveal_token(rng, &parameters, &deck[3]).map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-    let kobi_rt_0 = kobi.compute_reveal_token(rng, &parameters, &deck[0])?;
-    let kobi_rt_2 = kobi.compute_reveal_token(rng, &parameters, &deck[2])?;
-    let kobi_rt_3 = kobi.compute_reveal_token(rng, &parameters, &deck[3])?;
+    let kobi_rt_0 = kobi.compute_reveal_token(rng, &parameters, &deck[0]).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let kobi_rt_2 = kobi.compute_reveal_token(rng, &parameters, &deck[2]).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let kobi_rt_3 = kobi.compute_reveal_token(rng, &parameters, &deck[3]).map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-    let nico_rt_0 = nico.compute_reveal_token(rng, &parameters, &deck[0])?;
-    let nico_rt_1 = nico.compute_reveal_token(rng, &parameters, &deck[1])?;
-    let nico_rt_3 = nico.compute_reveal_token(rng, &parameters, &deck[3])?;
+    let nico_rt_0 = nico.compute_reveal_token(rng, &parameters, &deck[0]).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let nico_rt_1 = nico.compute_reveal_token(rng, &parameters, &deck[1]).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let nico_rt_3 = nico.compute_reveal_token(rng, &parameters, &deck[3]).map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-    let tom_rt_0 = tom.compute_reveal_token(rng, &parameters, &deck[0])?;
-    let tom_rt_1 = tom.compute_reveal_token(rng, &parameters, &deck[1])?;
-    let tom_rt_2 = tom.compute_reveal_token(rng, &parameters, &deck[2])?;
+    let tom_rt_0 = tom.compute_reveal_token(rng, &parameters, &deck[0]).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let tom_rt_1 = tom.compute_reveal_token(rng, &parameters, &deck[1]).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let tom_rt_2 = tom.compute_reveal_token(rng, &parameters, &deck[2]).map_err(|e| JsValue::from_str(&e.to_string()))?;
 
     let mut rts_andrija = vec![kobi_rt_0, nico_rt_0, tom_rt_0];
     let mut rts_kobi = vec![andrija_rt_1, nico_rt_1, tom_rt_1];
@@ -379,10 +382,10 @@ fn main() -> anyhow::Result<()> {
     let mut rts_tom = vec![andrija_rt_3, kobi_rt_3, nico_rt_3];
 
     //At this moment players privately open their cards and only they know that values
-    andrija.peek_at_card(&parameters, &mut rts_andrija, &card_mapping, &deck[0])?;
-    kobi.peek_at_card(&parameters, &mut rts_kobi, &card_mapping, &deck[1])?;
-    nico.peek_at_card(&parameters, &mut rts_nico, &card_mapping, &deck[2])?;
-    tom.peek_at_card(&parameters, &mut rts_tom, &card_mapping, &deck[3])?;
+    andrija.peek_at_card(&parameters, &mut rts_andrija, &card_mapping, &deck[0]).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    kobi.peek_at_card(&parameters, &mut rts_kobi, &card_mapping, &deck[1]).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    nico.peek_at_card(&parameters, &mut rts_nico, &card_mapping, &deck[2]).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    tom.peek_at_card(&parameters, &mut rts_tom, &card_mapping, &deck[3]).map_err(|e| JsValue::from_str(&e.to_string()))?;
 
     /* Here we can add custom logic of a game:
         1. swap card
@@ -393,28 +396,28 @@ fn main() -> anyhow::Result<()> {
     //At this moment players reveal their cards to each other and everything becomes public
 
     //1.a everyone reveals the secret for their card
-    let andrija_rt_0 = andrija.compute_reveal_token(rng, &parameters, &deck[0])?;
-    let kobi_rt_1 = kobi.compute_reveal_token(rng, &parameters, &deck[1])?;
-    let nico_rt_2 = nico.compute_reveal_token(rng, &parameters, &deck[2])?;
-    let tom_rt_3 = tom.compute_reveal_token(rng, &parameters, &deck[3])?;
+    let andrija_rt_0 = andrija.compute_reveal_token(rng, &parameters, &deck[0]).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let kobi_rt_1 = kobi.compute_reveal_token(rng, &parameters, &deck[1]).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let nico_rt_2 = nico.compute_reveal_token(rng, &parameters, &deck[2]).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let tom_rt_3 = tom.compute_reveal_token(rng, &parameters, &deck[3]).map_err(|e| JsValue::from_str(&e.to_string()))?;
 
     //2. tokens for all other cards are exchanged
     //TODO add struct for this so that we can just clone
-    let andrija_rt_1 = andrija.compute_reveal_token(rng, &parameters, &deck[1])?;
-    let andrija_rt_2 = andrija.compute_reveal_token(rng, &parameters, &deck[2])?;
-    let andrija_rt_3 = andrija.compute_reveal_token(rng, &parameters, &deck[3])?;
+    let andrija_rt_1 = andrija.compute_reveal_token(rng, &parameters, &deck[1]).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let andrija_rt_2 = andrija.compute_reveal_token(rng, &parameters, &deck[2]).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let andrija_rt_3 = andrija.compute_reveal_token(rng, &parameters, &deck[3]).map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-    let kobi_rt_0 = kobi.compute_reveal_token(rng, &parameters, &deck[0])?;
-    let kobi_rt_2 = kobi.compute_reveal_token(rng, &parameters, &deck[2])?;
-    let kobi_rt_3 = kobi.compute_reveal_token(rng, &parameters, &deck[3])?;
+    let kobi_rt_0 = kobi.compute_reveal_token(rng, &parameters, &deck[0]).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let kobi_rt_2 = kobi.compute_reveal_token(rng, &parameters, &deck[2]).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let kobi_rt_3 = kobi.compute_reveal_token(rng, &parameters, &deck[3]).map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-    let nico_rt_0 = nico.compute_reveal_token(rng, &parameters, &deck[0])?;
-    let nico_rt_1 = nico.compute_reveal_token(rng, &parameters, &deck[1])?;
-    let nico_rt_3 = nico.compute_reveal_token(rng, &parameters, &deck[3])?;
+    let nico_rt_0 = nico.compute_reveal_token(rng, &parameters, &deck[0]).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let nico_rt_1 = nico.compute_reveal_token(rng, &parameters, &deck[1]).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let nico_rt_3 = nico.compute_reveal_token(rng, &parameters, &deck[3]).map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-    let tom_rt_0 = tom.compute_reveal_token(rng, &parameters, &deck[0])?;
-    let tom_rt_1 = tom.compute_reveal_token(rng, &parameters, &deck[1])?;
-    let tom_rt_2 = tom.compute_reveal_token(rng, &parameters, &deck[2])?;
+    let tom_rt_0 = tom.compute_reveal_token(rng, &parameters, &deck[0]).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let tom_rt_1 = tom.compute_reveal_token(rng, &parameters, &deck[1]).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let tom_rt_2 = tom.compute_reveal_token(rng, &parameters, &deck[2]).map_err(|e| JsValue::from_str(&e.to_string()))?;
 
     let rt_0 = vec![andrija_rt_0, kobi_rt_0, nico_rt_0, tom_rt_0];
     let rt_1 = vec![andrija_rt_1, kobi_rt_1, nico_rt_1, tom_rt_1];
@@ -422,10 +425,10 @@ fn main() -> anyhow::Result<()> {
     let rt_3 = vec![andrija_rt_3, kobi_rt_3, nico_rt_3, tom_rt_3];
 
     //Everyone computes for each card (except for their own card):
-    let andrija_card = open_card(&parameters, &rt_0, &card_mapping, &deck[0])?;
-    let kobi_card = open_card(&parameters, &rt_1, &card_mapping, &deck[1])?;
-    let nico_card = open_card(&parameters, &rt_2, &card_mapping, &deck[2])?;
-    let tom_card = open_card(&parameters, &rt_3, &card_mapping, &deck[3])?;
+    let andrija_card = open_card(&parameters, &rt_0, &card_mapping, &deck[0]).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let kobi_card = open_card(&parameters, &rt_1, &card_mapping, &deck[1]).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let nico_card = open_card(&parameters, &rt_2, &card_mapping, &deck[2]).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let tom_card = open_card(&parameters, &rt_3, &card_mapping, &deck[3]).map_err(|e| JsValue::from_str(&e.to_string()))?;
 
     println!("Andrija: {:?}", andrija_card);
     println!("Kobi: {:?}", kobi_card);
